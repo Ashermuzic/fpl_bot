@@ -3,6 +3,7 @@ import axios from "axios";
 // import { startFunction, helpFunction } from "./routes/main.js";
 
 const userIDs = {};
+const logger = [];
 
 // Create a new instance of the Telegraf bot
 const bot = new Telegraf("6544201173:AAFg_NMPmWkTST4RSXQfztME6uM25xISoB8");
@@ -29,10 +30,12 @@ To get started, please provide me with your FPL user Id. Don't worry, your ID is
 });
 
 bot.action("setid", (ctx) => {
+  ctx.answerCbQuery();
   ctx.reply("Please enter your FPL user ID:");
 });
 
 bot.action("locate", (ctx) => {
+  ctx.answerCbQuery();
   bot.telegram.sendMessage(ctx.chat.id, `you can find your id at ...`, {
     reply_markup: {
       inline_keyboard: [[{ text: "Input id", callback_data: "setid" }]],
@@ -40,23 +43,48 @@ bot.action("locate", (ctx) => {
   });
 });
 
-bot.hears(/^\d+$/, (ctx) => {
+bot.hears(/^\d+$/, async (ctx) => {
   const userId = ctx.message.text;
-  userIDs[ctx.from.id] = userId;
-  bot.telegram.sendMessage(
-    ctx.chat.id,
-    `Your FPL user ID (${userId}) has been saved.`,
-    {
-      reply_markup: {
-        inline_keyboard: [[{ text: "Proceed", callback_data: "main_menu" }]],
-      },
-    }
-  );
+
+  try {
+    const response = await axios.get(
+      `https://fantasy.premierleague.com/api/entry/${userId}/`
+    );
+
+    const playerName = `${response.data.player_first_name} ${response.data.player_last_name}`;
+
+    userIDs[ctx.from.id] = userId;
+
+    //logger
+    logger.push({
+      userId: ctx.from.id,
+      telegramUsername: ctx.from.username,
+      fplUserId: userId,
+      playerName: playerName, // Store player's first name in logger
+      timestamp: new Date().toISOString(),
+    });
+
+    bot.telegram.sendMessage(
+      ctx.chat.id,
+      `${playerName} : \nYour FPL user ID (${userId}) has been saved.`,
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: "Proceed", callback_data: "main_menu" }]],
+        },
+      }
+    );
+
+    console.log(logger);
+  } catch (error) {
+    console.error(error);
+    ctx.reply("An error occurred while fetching data.");
+  }
 });
 
 // Main Menu
 
 bot.action("main_menu", (ctx) => {
+  ctx.answerCbQuery();
   bot.telegram.sendMessage(
     ctx.chat.id,
     `Feel free to choose from the options below to explore cool statistics for your account`,
@@ -65,14 +93,17 @@ bot.action("main_menu", (ctx) => {
         inline_keyboard: [
           [
             { text: "Points", callback_data: "points" },
+            { text: "Leagues", callback_data: "leagues" },
+          ],
+          [
             { text: "Ranks", callback_data: "ranks" },
+            { text: "History", callback_data: "history" },
           ],
           [
             { text: "Profile", callback_data: "profile" },
-            { text: "History", callback_data: "history" },
+            { text: "Help", callback_data: "main_help" },
           ],
-          [{ text: "Help", callback_data: "main_help" }],
-          [{ text: "Credentials", callback_data: "credentials" }],
+          [{ text: "About Developers", callback_data: "credentials" }],
         ],
       },
     }
@@ -82,21 +113,111 @@ bot.action("main_menu", (ctx) => {
 /* ============== POINTS ============== */
 
 bot.action("points", (ctx) => {
+  ctx.answerCbQuery();
   bot.telegram.sendMessage(ctx.chat.id, `View your points`, {
     reply_markup: {
       inline_keyboard: [
         [
           { text: "Overall", callback_data: "overall_point" },
-          { text: "Current Game week", callback_data: "current_gw_point" },
+          { text: "Current GW", callback_data: "current_gw_point" },
         ],
       ],
     },
   });
 });
 
+/* ============== LEAGUES ============== */
+
+bot.action("leagues", async (ctx) => {
+  ctx.answerCbQuery();
+  // Check if user ID is already provided
+  const userId = userIDs[ctx.from.id];
+
+  if (userId) {
+    try {
+      const response = await axios.get(
+        `https://fantasy.premierleague.com/api/entry/${userId}/`
+      );
+      const leagueButtons = response.data.leagues.classic.map((league) => ({
+        text: league.name,
+        callback_data: `league_${league.id}`, // Use a unique identifier for each league
+      }));
+
+      // Organize the league buttons into rows
+      const inlineKeyboard = leagueButtons.map((button) => [button]);
+      // Add a "Back to Top" button at the end of the inline keyboard
+      inlineKeyboard.push([
+        { text: "Back To Top", callback_data: "main_menu" },
+      ]);
+
+      bot.telegram.sendMessage(ctx.chat.id, `Select a league:`, {
+        reply_markup: {
+          inline_keyboard: inlineKeyboard,
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      ctx.reply("An error occurred while fetching data.");
+    }
+  } else {
+    ctx.reply(
+      "Please provide your FPL user ID first using the /setid command."
+    );
+  }
+});
+
+// ...
+
+bot.action(/^league_\d+$/, async (ctx) => {
+  ctx.answerCbQuery();
+  const userId = userIDs[ctx.from.id];
+
+  // Extract the league ID from the callback data
+  const leagueId = ctx.callbackQuery.data.split("_")[1];
+
+  // Perform actions related to the specific league
+  try {
+    // Fetch league details using the league ID
+    const leagueDetails = await axios.get(
+      `https://fantasy.premierleague.com/api/leagues-classic/${leagueId}/standings/`
+    );
+
+    const userResponse = await axios.get(
+      `https://fantasy.premierleague.com/api/entry/${userId}/`
+    ); //
+
+    // You can do whatever you want with the leagueDetails
+    // For example, you can send a message with the league standings
+    const leagueStandings = leagueDetails.data.standings.results;
+    const leagueStandingsMessage = leagueStandings
+      .map((team) => `${team.rank}. ${team.entry_name} - ${team.total}`)
+      .join("\n");
+
+    bot.telegram.sendMessage(
+      ctx.chat.id,
+      `Your standing : 0000
+      
+League Standings:\n${leagueStandingsMessage}`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Back to Main Menu", callback_data: "main_menu" }],
+          ],
+        },
+      }
+    );
+  } catch (error) {
+    console.error(error);
+    ctx.reply("An error occurred while fetching league details.");
+  }
+});
+
+// ...
+
 //Overall_point
 
 bot.action("overall_point", async (ctx) => {
+  ctx.answerCbQuery();
   // Check if user ID is already provided
   const userId = userIDs[ctx.from.id];
 
@@ -135,6 +256,7 @@ bot.action("overall_point", async (ctx) => {
 
 //Current GW point
 bot.action("current_gw_point", async (ctx) => {
+  ctx.answerCbQuery();
   // Check if user ID is already provided
   const userId = userIDs[ctx.from.id];
 
@@ -171,12 +293,13 @@ bot.action("current_gw_point", async (ctx) => {
 /* ============== RANKS ============== */
 
 bot.action("ranks", (ctx) => {
+  ctx.answerCbQuery();
   bot.telegram.sendMessage(ctx.chat.id, `View your ranks`, {
     reply_markup: {
       inline_keyboard: [
         [
+          { text: "League", callback_data: "league_rank" },
           { text: "Overall", callback_data: "overall_rank" },
-          { text: "Current Game week", callback_data: "current_gw_rank" },
         ],
       ],
     },
@@ -186,6 +309,7 @@ bot.action("ranks", (ctx) => {
 //Overall_rank
 
 bot.action("overall_rank", async (ctx) => {
+  ctx.answerCbQuery();
   // Check if user ID is already provided
   const userId = userIDs[ctx.from.id];
 
@@ -222,8 +346,9 @@ bot.action("overall_rank", async (ctx) => {
   }
 });
 
-//Current GW rank
-bot.action("current_gw_rank", async (ctx) => {
+//League rank
+bot.action("league_rank", async (ctx) => {
+  ctx.answerCbQuery();
   // Check if user ID is already provided
   const userId = userIDs[ctx.from.id];
 
@@ -234,14 +359,18 @@ bot.action("current_gw_rank", async (ctx) => {
       );
       bot.telegram.sendMessage(
         ctx.chat.id,
-        `Your Current Game week rank is ${response.data.summary_event_rank.toLocaleString()}`,
+        `   
+League       >>       Rank 
+${response.data.leagues.classic
+  .map(
+    (league) => `
+  . ${league.name}    >>    Rank: ${league.entry_rank.toLocaleString()}`
+  )
+  .join("\n\n")}`,
         {
           reply_markup: {
             inline_keyboard: [
-              [
-                { text: "Overall", callback_data: "overall_rank" },
-                { text: "Back To Top", callback_data: "main_menu" },
-              ],
+              [{ text: "Back To Top", callback_data: "main_menu" }],
             ],
           },
         }
@@ -260,6 +389,7 @@ bot.action("current_gw_rank", async (ctx) => {
 /* ============== PROFILE ============== */
 
 bot.action("profile", async (ctx) => {
+  ctx.answerCbQuery();
   // Check if user ID is already provided
   const userId = userIDs[ctx.from.id];
 
@@ -304,6 +434,7 @@ ${response.data.leagues.classic
 /* ============== HISTORY ============== */
 
 bot.action("history", (ctx) => {
+  ctx.answerCbQuery();
   bot.telegram.sendMessage(ctx.chat.id, `View your history`, {
     reply_markup: {
       inline_keyboard: [
@@ -319,6 +450,7 @@ bot.action("history", (ctx) => {
 //Past
 
 bot.action("past_history", async (ctx) => {
+  ctx.answerCbQuery();
   // Check if user ID is already provided
   const userId = userIDs[ctx.from.id];
 
@@ -360,6 +492,7 @@ bot.action("past_history", async (ctx) => {
 //current
 
 bot.action("current_history", async (ctx) => {
+  ctx.answerCbQuery();
   // Check if user ID is already provided
   const userId = userIDs[ctx.from.id];
 
@@ -400,6 +533,50 @@ bot.action("current_history", async (ctx) => {
       "Please provide your FPL user ID first using the /setid command."
     );
   }
+});
+
+/* ============== CREDENTIALS ============== */
+
+bot.action("credentials", (ctx) => {
+  ctx.answerCbQuery();
+  bot.telegram.sendMessage(
+    ctx.chat.id,
+    `This bot is made by Asher
+For more information contact me at 
+Phone: +251900269094
+Email: ashersam116@gmail.com
+Telegram: https://t.me/ashermuzic`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Back To Top", callback_data: "main_menu" }],
+        ],
+      },
+    }
+  );
+});
+
+/* ============== CREDENTIALS ============== */
+
+bot.action("main_help", (ctx) => {
+  ctx.answerCbQuery();
+  bot.telegram.sendMessage(
+    ctx.chat.id,
+    `Welcome to this bot powered by the official API provided by FPL (Fantasy Premier League).
+
+In case you encounter any issues with the bot's functionality, there's no need to worry. Simply restart the bot by typing /start and follow the provided procedures to get back on track.
+
+If you have any inquiries or need to reach out to the administrator, please refer to the credentials page for contact information.
+
+Thank you for using our FPL API-powered bot, and enjoy your Fantasy Premier League experience!`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Back To Top", callback_data: "main_menu" }],
+        ],
+      },
+    }
+  );
 });
 
 // if random text inserted
