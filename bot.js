@@ -161,12 +161,10 @@ bot.action("leagues", async (ctx) => {
     }
   } else {
     ctx.reply(
-      "Please provide your FPL user ID first using the /setid command."
+      "Please provide your FPL user ID first by going back to the /start command."
     );
   }
 });
-
-// ...
 
 bot.action(/^league_\d+$/, async (ctx) => {
   ctx.answerCbQuery();
@@ -184,7 +182,7 @@ bot.action(/^league_\d+$/, async (ctx) => {
 
     const userResponse = await axios.get(
       `https://fantasy.premierleague.com/api/entry/${userId}/`
-    ); //
+    );
 
     // You can do whatever you want with the leagueDetails
     // For example, you can send a message with the league standings
@@ -195,8 +193,7 @@ bot.action(/^league_\d+$/, async (ctx) => {
 
     bot.telegram.sendMessage(
       ctx.chat.id,
-      `Your standing : 0000
-      
+      `
 League Standings:\n${leagueStandingsMessage}`,
       {
         reply_markup: {
@@ -249,7 +246,7 @@ bot.action("overall_point", async (ctx) => {
     }
   } else {
     ctx.reply(
-      "Please provide your FPL user ID first using the /setid command."
+      "Please provide your FPL user ID first by going back to the /start command."
     );
   }
 });
@@ -285,7 +282,7 @@ bot.action("current_gw_point", async (ctx) => {
     }
   } else {
     ctx.reply(
-      "Please provide your FPL user ID first using the /setid command."
+      "Please provide your FPL user ID first by going back to the /start command."
     );
   }
 });
@@ -381,7 +378,7 @@ ${response.data.leagues.classic
     }
   } else {
     ctx.reply(
-      "Please provide your FPL user ID first using the /setid command."
+      "Please provide your FPL user ID first by going back to the /start command."
     );
   }
 });
@@ -426,7 +423,7 @@ ${response.data.leagues.classic
     }
   } else {
     ctx.reply(
-      "Please provide your FPL user ID first using the /setid command."
+      "Please provide your FPL user ID first by going back to the /start command."
     );
   }
 });
@@ -484,7 +481,7 @@ bot.action("past_history", async (ctx) => {
     }
   } else {
     ctx.reply(
-      "Please provide your FPL user ID first using the /setid command."
+      "Please provide your FPL user ID first by going back to the /start command."
     );
   }
 });
@@ -530,7 +527,7 @@ bot.action("current_history", async (ctx) => {
     }
   } else {
     ctx.reply(
-      "Please provide your FPL user ID first using the /setid command."
+      "Please provide your FPL user ID first by going back to the /start command."
     );
   }
 });
