@@ -1,12 +1,14 @@
-import Telegraf from "telegraf";
-import axios from "axios";
+require("dotenv").config();
+const Telegraf = require("telegraf");
+const axios = require("axios");
+
 // import { startFunction, helpFunction } from "./routes/main.js";
 
 const userIDs = {};
 const logger = [];
-
+const botToken = process.env.TELEGRAM_BOT_TOKEN;
 // Create a new instance of the Telegraf bot
-const bot = new Telegraf("6544201173:AAFg_NMPmWkTST4RSXQfztME6uM25xISoB8");
+const bot = new Telegraf(botToken);
 
 // Set up a command handler for the /start command
 // bot.start(startFunction);
